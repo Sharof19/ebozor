@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "655392999538",
+    "project_id": "ebozor-d7a6d",
+    "storage_bucket": "ebozor-d7a6d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:655392999538:android:22911967d99f5d1c391aeb",
+        "android_client_info": {
+          "package_name": "com.example.ebozor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_MDeTc272yr2dijgZpq2JrfPgUBsFENI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
