@@ -1,7 +1,10 @@
 import 'dart:ui';
 
 import 'package:ebozor/src/core/theme/app_colors.dart';
+import 'package:ebozor/src/core/widgets/error_dialog.dart';
+import 'package:ebozor/src/data/services/payme_service.dart';
 import 'package:ebozor/src/data/services/payment_plan_service.dart';
+import 'package:ebozor/src/features/payments/presentation/pages/payment_methods_page.dart';
 import 'package:flutter/material.dart';
 
 class PaymentPlanPage extends StatefulWidget {
@@ -26,6 +29,8 @@ class PaymentPlanPage extends StatefulWidget {
 class _PaymentPlanPageState extends State<PaymentPlanPage> {
   late Future<ClientPaymentPlan> _future;
   final Set<int> _selectedPlannedKeys = {};
+  final PaymeService _paymeService = PaymeService();
+  bool _isPaying = false;
 
   @override
   void initState() {
@@ -35,11 +40,20 @@ class _PaymentPlanPageState extends State<PaymentPlanPage> {
         : widget.service.fetchPlan(agreementId: widget.agreementId);
   }
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _selectedPlannedKeys.clear();
       _future = widget.service.fetchPlan(agreementId: widget.agreementId);
     });
+    try {
+      await _future;
+    } catch (_) {
+      // ignore refresh errors
+    }
+  }
+
+  void _reload() {
+    _refresh();
   }
 
   void _handlePlannedToggle(
@@ -62,6 +76,67 @@ class _PaymentPlanPageState extends State<PaymentPlanPage> {
         }
       }
     });
+  }
+
+  Future<void> _startPayment({
+    required ClientPaymentPlan plan,
+    required double total,
+  }) async {
+    if (_isPaying) return;
+    if (plan.id <= 0) {
+      await _showErrorDialog("To'lov rejasi ID topilmadi.");
+      return;
+    }
+    if (total <= 0) {
+      await _showErrorDialog("To'lov summasi topilmadi.");
+      return;
+    }
+
+    setState(() => _isPaying = true);
+    try {
+      debugPrint(
+        'Payme init payload => plan: ${plan.id}, amount: ${_formatAmountForApi(total)}',
+      );
+      final response = await _paymeService.initPayment(
+        planId: plan.id,
+        amount: _formatAmountForApi(total),
+      );
+      if (!mounted) return;
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaymentMethodsPage(
+            paymeUrl: response.paymeUrl,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (result == true) {
+        await _refresh();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      await _showErrorDialog(
+        e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isPaying = false);
+      }
+    }
+  }
+
+  Future<void> _showErrorDialog(String message) async {
+    if (!mounted) return;
+    await showErrorDialog(context, message);
+  }
+
+  void _handleErrorContinue() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    _reload();
   }
 
   @override
@@ -87,7 +162,7 @@ class _PaymentPlanPageState extends State<PaymentPlanPage> {
                 "To'lov rejasi yuklanmadi.";
             return _ErrorState(
               message: message,
-              onRetry: _reload,
+              onContinue: _handleErrorContinue,
             );
           }
 
@@ -95,7 +170,7 @@ class _PaymentPlanPageState extends State<PaymentPlanPage> {
           if (plan == null) {
             return _ErrorState(
               message: "To'lov rejasi ma'lumoti mavjud emas.",
-              onRetry: _reload,
+              onContinue: _handleErrorContinue,
             );
           }
           final plannedKeys = _plannedKeys(plan.schedules);
@@ -111,69 +186,69 @@ class _PaymentPlanPageState extends State<PaymentPlanPage> {
             0,
             (sum, item) => sum + _parseAmount(item.amount),
           );
+          final canPay = selectedSchedules.isNotEmpty && !_isPaying;
 
           return Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  children: [
-                    _PlanSummary(
-                      contractLabel: contractLabel,
-                      plan: plan,
-                    ),
-                    const SizedBox(height: 20),
-                    const _SectionTitle(title: 'To\'lov jadvali'),
-                    const SizedBox(height: 10),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (plan.schedules.isEmpty) {
-                          return const _EmptyScheduleState();
-                        }
-                        final isNarrow = constraints.maxWidth < 360;
-                        if (isNarrow) {
-                          return Column(
-                            children: plan.schedules
-                                .map(
-                                  (item) => Padding(
-                                    padding:
-                                        const EdgeInsets.only(bottom: 12),
-                                    child: _ScheduleCard(
-                                      schedule: item,
-                                      selectedPlannedKeys: _selectedPlannedKeys,
-                                      onPlannedToggle: onPlannedToggle,
+                child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      _PlanSummary(
+                        contractLabel: contractLabel,
+                        plan: plan,
+                      ),
+                      const SizedBox(height: 20),
+                      const _SectionTitle(title: 'To\'lov jadvali'),
+                      const SizedBox(height: 10),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (plan.schedules.isEmpty) {
+                            return const _EmptyScheduleState();
+                          }
+                          final isNarrow = constraints.maxWidth < 360;
+                          final isCompact = constraints.maxWidth < 520;
+                          if (isNarrow) {
+                            return Column(
+                              children: plan.schedules
+                                  .map(
+                                    (item) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
+                                      child: _ScheduleCard(
+                                        schedule: item,
+                                        selectedPlannedKeys:
+                                            _selectedPlannedKeys,
+                                        onPlannedToggle: onPlannedToggle,
+                                      ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
+                                  )
+                                  .toList(),
+                            );
+                          }
+                          final table = _ScheduleTable(
+                            schedules: plan.schedules,
+                            selectedPlannedKeys: _selectedPlannedKeys,
+                            onPlannedToggle: onPlannedToggle,
+                            isCompact: isCompact,
                           );
-                        }
-                        final table = _ScheduleTable(
-                          schedules: plan.schedules,
-                          selectedPlannedKeys: _selectedPlannedKeys,
-                          onPlannedToggle: onPlannedToggle,
-                        );
-                        if (constraints.maxWidth < 520) {
-                          return SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: SizedBox(
-                                width: 520,
-                                child: table,
-                              ),
-                            ),
-                          );
-                        }
-                        return table;
-                      },
-                    ),
-                  ],
+                          return table;
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
               _PaymentFooterBar(
                 selectedCount: selectedSchedules.length,
                 totalAmount: _formatAmount(total),
+                isLoading: _isPaying,
+                onPay: canPay
+                    ? () => _startPayment(plan: plan, total: total)
+                    : null,
               ),
             ],
           );
@@ -298,14 +373,18 @@ class _PaymentFooterBar extends StatelessWidget {
   const _PaymentFooterBar({
     required this.selectedCount,
     required this.totalAmount,
+    required this.isLoading,
+    required this.onPay,
   });
 
   final int selectedCount;
   final String totalAmount;
+  final bool isLoading;
+  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
-    final isEnabled = selectedCount > 0;
+    final isEnabled = selectedCount > 0 && onPay != null && !isLoading;
     return SafeArea(
       top: false,
       child: Container(
@@ -364,7 +443,7 @@ class _PaymentFooterBar extends StatelessWidget {
               ),
             ),
             ElevatedButton(
-              onPressed: isEnabled ? () {} : null,
+              onPressed: isEnabled ? onPay : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryAccent,
                 foregroundColor: Colors.white,
@@ -374,7 +453,16 @@ class _PaymentFooterBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('To\'lash'),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('To\'lash'),
             ),
           ],
         ),
@@ -446,15 +534,23 @@ class _StatBox extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.text, required this.color});
+  const _StatusPill({
+    required this.text,
+    required this.color,
+    this.isCompact = false,
+  });
 
   final String text;
   final Color color;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 8 : 10,
+        vertical: isCompact ? 4 : 6,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
@@ -462,7 +558,7 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: isCompact ? 11 : 12,
           color: color,
           fontWeight: FontWeight.w700,
         ),
@@ -535,11 +631,13 @@ class _ScheduleTable extends StatelessWidget {
     required this.schedules,
     required this.selectedPlannedKeys,
     required this.onPlannedToggle,
+    this.isCompact = false,
   });
 
   final List<ClientSchedule> schedules;
   final Set<int> selectedPlannedKeys;
   final void Function(int tappedKey, bool nextValue) onPlannedToggle;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -554,31 +652,47 @@ class _ScheduleTable extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: EdgeInsets.symmetric(
+                horizontal: isCompact ? 8 : 12,
+                vertical: isCompact ? 8 : 10,
+              ),
               color: AppColors.accentLight,
-              child: const Row(
+              child: Row(
                 children: [
-                  _TableCell(text: '№', flex: 1, isHeader: true),
-                  _TableCell(text: 'Muddat', flex: 3, isHeader: true),
+                  _TableCell(
+                    text: '№',
+                    flex: 1,
+                    isHeader: true,
+                    isCompact: isCompact,
+                  ),
+                  _TableCell(
+                    text: 'Muddat',
+                    flex: isCompact ? 2 : 3,
+                    isHeader: true,
+                    isCompact: isCompact,
+                  ),
                   _TableCell(
                     text: 'Summa',
-                    flex: 3,
+                    flex: isCompact ? 2 : 3,
                     isHeader: true,
                     align: TextAlign.right,
                     isNumeric: true,
+                    isCompact: isCompact,
                   ),
                   _TableCell(
                     text: 'To\'langan',
-                    flex: 3,
+                    flex: isCompact ? 2 : 3,
                     isHeader: true,
                     align: TextAlign.right,
                     isNumeric: true,
+                    isCompact: isCompact,
                   ),
                   _TableCell(
                     text: 'Holat',
-                    flex: 3,
+                    flex: isCompact ? 2 : 3,
                     isHeader: true,
                     align: TextAlign.center,
+                    isCompact: isCompact,
                   ),
                 ],
               ),
@@ -595,6 +709,7 @@ class _ScheduleTable extends StatelessWidget {
                       : const Color(0xFFF7F9FC),
                   selectedPlannedKeys: selectedPlannedKeys,
                   onPlannedToggle: onPlannedToggle,
+                  isCompact: isCompact,
                 );
               },
             ),
@@ -612,6 +727,7 @@ class _ScheduleTableRow extends StatelessWidget {
     required this.backgroundColor,
     required this.selectedPlannedKeys,
     required this.onPlannedToggle,
+    this.isCompact = false,
   });
 
   final ClientSchedule schedule;
@@ -619,6 +735,7 @@ class _ScheduleTableRow extends StatelessWidget {
   final Color backgroundColor;
   final Set<int> selectedPlannedKeys;
   final void Function(int tappedKey, bool nextValue) onPlannedToggle;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -632,7 +749,10 @@ class _ScheduleTableRow extends StatelessWidget {
     final isActive = isPlanned && selectedPlannedKeys.contains(scheduleKey);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 8 : 12,
+        vertical: isCompact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         color: backgroundColor,
         border: isLast
@@ -645,15 +765,19 @@ class _ScheduleTableRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _TableCell(text: '#${schedule.order}', flex: 1),
+          _TableCell(
+            text: schedule.order.toString(),
+            flex: 1,
+            isCompact: isCompact,
+          ),
           Expanded(
-            flex: 3,
+            flex: isCompact ? 2 : 3,
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     dueDate,
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(fontSize: isCompact ? 12 : 13),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -662,26 +786,35 @@ class _ScheduleTableRow extends StatelessWidget {
           ),
           _TableCell(
             text: amount,
-            flex: 3,
+            flex: isCompact ? 2 : 3,
             align: TextAlign.right,
             isNumeric: true,
+            isCompact: isCompact,
           ),
           _TableCell(
             text: paidAmount,
-            flex: 3,
+            flex: isCompact ? 2 : 3,
             align: TextAlign.right,
             isNumeric: true,
+            isCompact: isCompact,
           ),
           Expanded(
-            flex: 3,
+            flex: isCompact ? 2 : 3,
             child: Align(
               alignment: Alignment.center,
               child: isPlanned
-                  ? _PlannedSwitch(
-                      value: isActive,
-                      onChanged: (next) => onPlannedToggle(scheduleKey, next),
+                  ? FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _PlannedSwitch(
+                        value: isActive,
+                        onChanged: (next) => onPlannedToggle(scheduleKey, next),
+                      ),
                     )
-                  : _StatusPill(text: statusText, color: color),
+                  : _StatusPill(
+                      text: statusText,
+                      color: color,
+                      isCompact: isCompact,
+                    ),
             ),
           ),
         ],
@@ -697,6 +830,7 @@ class _TableCell extends StatelessWidget {
     this.align = TextAlign.left,
     this.isHeader = false,
     this.isNumeric = false,
+    this.isCompact = false,
   });
 
   final String text;
@@ -704,6 +838,7 @@ class _TableCell extends StatelessWidget {
   final TextAlign align;
   final bool isHeader;
   final bool isNumeric;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +849,9 @@ class _TableCell extends StatelessWidget {
         textAlign: align,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: isHeader ? 12 : 13,
+          fontSize: isHeader
+              ? (isCompact ? 11 : 12)
+              : (isCompact ? 12 : 13),
           fontWeight: isHeader ? FontWeight.w700 : FontWeight.w600,
           color: isHeader ? Colors.black87 : Colors.black87,
           fontFeatures: isNumeric ? const [FontFeature.tabularFigures()] : null,
@@ -775,7 +912,7 @@ class _ScheduleCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '№ ${schedule.order}',
+                  schedule.order.toString(),
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: Colors.black87,
@@ -964,11 +1101,15 @@ String _formatAmountString(String? raw) {
   return _formatAmount(_parseAmount(trimmed));
 }
 
+String _formatAmountForApi(double value) {
+  return value.toStringAsFixed(0);
+}
+
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
+  const _ErrorState({required this.message, required this.onContinue});
 
   final String message;
-  final VoidCallback onRetry;
+  final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -985,12 +1126,12 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: onRetry,
+              onPressed: onContinue,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryAccent,
                 foregroundColor: Colors.white,
               ),
-              child: const Text("Qayta urinib ko'rish"),
+              child: const Text('Davom etish'),
             ),
           ],
         ),

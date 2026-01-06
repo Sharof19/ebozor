@@ -13,7 +13,8 @@ class CookieConsentPage extends StatefulWidget {
 
 class _CookieConsentPageState extends State<CookieConsentPage> {
   bool _isChecked = false;
-
+  static const String _privacyUrl =
+      'https://docs.google.com/document/d/1WDhxALx2Rjl9fq8JX4HzY_FktxaFeKIU2PNFyfAxyzM/edit?usp=sharing';
   Future<void> _launchURL(String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -44,14 +45,18 @@ class _CookieConsentPageState extends State<CookieConsentPage> {
                     ),
                     const SizedBox(height: 30),
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Checkbox(
                           value: _isChecked,
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           onChanged: (val) => setState(() {
                             _isChecked = val ?? false;
                           }),
                         ),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: RichText(
                             text: TextSpan(
@@ -59,22 +64,11 @@ class _CookieConsentPageState extends State<CookieConsentPage> {
                                   fontSize: 16, color: Colors.black),
                               children: [
                                 TextSpan(
-                                  text: 'Ommaviy oferta ',
+                                  text: 'Maxfiylik siyosati',
                                   style: const TextStyle(color: Colors.blue),
                                   recognizer: TapGestureRecognizer()
                                     ..onTap = () {
-                                      _launchURL(
-                                          'https://your-website.com/privacy');
-                                    },
-                                ),
-                                const TextSpan(text: 'va '),
-                                TextSpan(
-                                  text: 'maxfiylik siyosati',
-                                  style: const TextStyle(color: Colors.blue),
-                                  recognizer: TapGestureRecognizer()
-                                    ..onTap = () {
-                                      _launchURL(
-                                          'https://your-website.com/privacy');
+                                      _launchURL(_privacyUrl);
                                     },
                                 ),
                                 const TextSpan(text: ' shartlariga roziman.'),

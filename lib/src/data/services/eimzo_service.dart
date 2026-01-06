@@ -65,7 +65,13 @@ class EimzoService {
       final pkcs = await _verify();
       if (pkcs != null && pkcs.isNotEmpty) {
         await SecureStorageService.savePkcs(pkcs);
-        await _requestToken(pkcs);
+        try {
+          await _requestToken(pkcs);
+        } catch (e) {
+          final message =
+              e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+          throw EimzoTokenException(message, pkcs);
+        }
         await AppPreferences.setSignedIn(true);
       }
       return pkcs;
@@ -198,15 +204,6 @@ class EimzoService {
 
     try {
       final decoded = jsonDecode(response.body);
-      final status = _extractStatus(decoded);
-      if (status != null && status != 1) {
-        final message = _extractMessage(decoded);
-        final suffix =
-            (message != null && message.isNotEmpty) ? ' - $message' : '';
-        throw Exception(
-          "Verify so'rovi muvaffaqiyatsiz: status $status$suffix",
-        );
-      }
       final data = _unwrapData(decoded);
       final pkcs7Attached = _extractString(
             data,
@@ -218,6 +215,21 @@ class EimzoService {
               : null) ??
           '';
       if (pkcs7Attached.isEmpty) {
+        final status = _extractStatus(decoded);
+        if (status != null && status != 1) {
+          final message = _extractMessage(data) ?? _extractMessage(decoded);
+          final normalized = message?.trim() ?? '';
+          if (status == -9 || normalized.contains('Signing time is out of valid range')) {
+            throw Exception(
+              "Imzo vaqti noto'g'ri. Telefon vaqtini avtomatik sozlang.",
+            );
+          }
+          final suffix =
+              (normalized.isNotEmpty) ? ' - $normalized' : '';
+          throw Exception(
+            "Verify so'rovi muvaffaqiyatsiz: status $status$suffix",
+          );
+        }
         throw Exception("PKCS7 ma'lumot bo'sh qaytdi");
       }
 
@@ -685,4 +697,14 @@ class EimzoService {
     }
     return null;
   }
+}
+
+class EimzoTokenException implements Exception {
+  EimzoTokenException(this.message, this.pkcs);
+
+  final String message;
+  final String pkcs;
+
+  @override
+  String toString() => message;
 }

@@ -5,10 +5,9 @@ import 'package:ebozor/src/features/auth/presentation/pages/auth_page.dart';
 import 'package:ebozor/src/features/auth/presentation/pages/internet_check_page.dart';
 import 'package:ebozor/src/features/auth/presentation/pages/onboarding/cookie_consent_page.dart';
 import 'package:ebozor/src/features/auth/presentation/pages/onboarding/onboarding_screen.dart';
-import 'package:ebozor/src/features/auth/presentation/pages/signing_page.dart';
 import 'package:ebozor/src/features/auth/presentation/pages/splash_screen.dart';
 import 'package:ebozor/src/features/navigation/presentation/pages/home_screen.dart';
-import 'package:ebozor/src/features/signing/bloc/eimzo_bloc.dart';
+import 'package:ebozor/src/features/auth/presentation/pages/signing_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -58,13 +57,7 @@ class _EbozorAppState extends State<EbozorApp> {
       '/onboarding': (context) => const OnboardingScreen(),
       '/inet_check': (context) => const InternetCheckPage(),
       '/auth': (context) => const AuthPage(),
-      '/signing': (context) => BlocProvider(
-            create: (context) => EimzoBloc(context.read<EimzoService>())
-              ..add(
-                const EimzoFlowStarted(),
-              ),
-            child: const SigningPage(),
-          ),
+      '/signing': (context) => const SigningPage(),
     };
   }
 

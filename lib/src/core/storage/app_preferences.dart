@@ -7,6 +7,7 @@ class AppPreferences {
   static const String _signedKey = 'signed';
   static const String _launchEimzoKey = 'shouldLaunchEimzo';
   static const String _cookiesAcceptedKey = 'cookiesAccepted';
+  static const String _demoModeKey = 'demoMode';
 
   static Future<bool> isBiometricEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -34,6 +35,7 @@ class AppPreferences {
     await prefs.remove(_signedKey);
     await prefs.remove(_launchEimzoKey);
     await prefs.remove(_cookiesAcceptedKey);
+    await prefs.remove(_demoModeKey);
   }
 
   static Future<void> setSignedIn(bool value) async {
@@ -54,5 +56,15 @@ class AppPreferences {
   static Future<void> setCookiesAccepted(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_cookiesAcceptedKey, value);
+  }
+
+  static Future<bool> isDemoMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_demoModeKey) ?? false;
+  }
+
+  static Future<void> setDemoMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_demoModeKey, value);
   }
 }

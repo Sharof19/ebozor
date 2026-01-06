@@ -12,16 +12,17 @@ class InternetCheckPage extends StatefulWidget {
 }
 
 class _InternetCheckPageState extends State<InternetCheckPage> {
-  bool _isChecking = false;
+  bool _showPage = false;
+  bool _isChecking = true;
   String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(_checkConnection);
+    Future.microtask(() => _checkConnection(initial: true));
   }
 
-  Future<void> _checkConnection() async {
+  Future<void> _checkConnection({bool initial = false}) async {
     if (!mounted) return;
     setState(() {
       _isChecking = true;
@@ -44,6 +45,7 @@ class _InternetCheckPageState extends State<InternetCheckPage> {
       }
 
       setState(() {
+        _showPage = true;
         _isChecking = false;
         _statusMessage =
             "Internet mavjud emas. Ulanishni tekshirib, qayta urinib ko'ring.";
@@ -51,6 +53,7 @@ class _InternetCheckPageState extends State<InternetCheckPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _showPage = true;
         _isChecking = false;
         _statusMessage =
             "Ulanishni tekshirishda xatolik yuz berdi. Iltimos, qayta urinib ko'ring.";
@@ -60,6 +63,16 @@ class _InternetCheckPageState extends State<InternetCheckPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_showPage) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
     final infoText = _isChecking
         ? 'Internet ulanishi tekshirilmoqda...'
         : (_statusMessage ??

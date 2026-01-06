@@ -1,3 +1,4 @@
+import 'package:ebozor/src/core/storage/app_preferences.dart';
 import 'package:ebozor/src/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -10,11 +11,20 @@ class AuthPage extends StatefulWidget {
 
 class _AuthPageState extends State<AuthPage> {
   bool _isNavigating = false;
+  bool _isStartingDemo = false;
 
   void _onContinue() {
     if (_isNavigating) return;
     setState(() => _isNavigating = true);
     Navigator.pushReplacementNamed(context, '/signing');
+  }
+
+  Future<void> _startDemo() async {
+    if (_isStartingDemo) return;
+    setState(() => _isStartingDemo = true);
+    await AppPreferences.setDemoMode(true);
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/main');
   }
 
   @override
@@ -96,6 +106,34 @@ class _AuthPageState extends State<AuthPage> {
                             'Davom etish',
                             style: TextStyle(
                               fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _isStartingDemo ? null : _startDemo,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: AppColors.primaryAccent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: _isStartingDemo
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Demo rejimi',
+                            style: TextStyle(
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
                           ),

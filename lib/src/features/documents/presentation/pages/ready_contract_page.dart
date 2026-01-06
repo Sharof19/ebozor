@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:ebozor/src/data/services/client_agreements_service.dart';
+import 'package:ebozor/src/core/widgets/error_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_html_table/flutter_html_table.dart';
@@ -31,10 +32,9 @@ class _ReadyContractPageState extends State<ReadyContractPage> {
   Future<bool> _ensureInternet(BuildContext context) async {
     final hasInternet = await InternetConnection().hasInternetAccess;
     if (!hasInternet && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Internet mavjud emas. Ulanishni tekshirib qayta urinib ko\'ring.'),
-        ),
+      await showErrorDialog(
+        context,
+        "Internet mavjud emas. Ulanishni tekshirib qayta urinib ko'ring.",
       );
     }
     return hasInternet;
@@ -150,12 +150,9 @@ class _ReadyContractPageState extends State<ReadyContractPage> {
     final hasInternet = await _ensureInternet(context);
     if (!hasInternet) return;
 
-    final messenger = ScaffoldMessenger.of(context);
     final callback = widget.onApprove;
     if (callback == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Imzolash harakati mavjud emas.')),
-      );
+      await showErrorDialog(context, 'Imzolash harakati mavjud emas.');
       return;
     }
     setState(() => _isSigning = true);
@@ -164,9 +161,7 @@ class _ReadyContractPageState extends State<ReadyContractPage> {
     } catch (e) {
       final message = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Imzolashda xato: $message')),
-      );
+      await showErrorDialog(context, "Imzolashda xato: $message");
     } finally {
       if (mounted) {
         setState(() => _isSigning = false);
@@ -182,57 +177,71 @@ class _ReadyContractPageState extends State<ReadyContractPage> {
     final callback = widget.onReject;
     if (callback == null) {
       if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Rad etish harakati mavjud emas.')),
-      );
+      await showErrorDialog(context, 'Rad etish harakati mavjud emas.');
       return;
     }
     if (_isRejecting) {
       return;
     }
-    final messenger = ScaffoldMessenger.of(context);
     FocusScope.of(context).unfocus();
-    final confirm = await showDialog<bool>(
+    final reasonInput = await showDialog<String?>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final controller = TextEditingController();
         return AlertDialog(
           title: const Text('Rad etishni tasdiqlaysizmi?'),
-          content: const Text('Tasdiqlashdan so\'ng shartnoma rad etiladi.'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Tasdiqlashdan so\'ng shartnoma rad etiladi.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Rad etish sababi',
+                  hintText: 'Sababini yozing (ixtiyoriy)',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+                maxLines: 2,
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(null),
               child: const Text('Bekor qilish'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text),
               child: const Text('Tasdiqlash'),
             ),
           ],
         );
       },
     );
-    if (!mounted || confirm != true) {
+    if (!mounted || reasonInput == null) {
       return;
     }
     setState(() => _isRejecting = true);
 
-    const reason = 'Sababsiz';
+    final reason = reasonInput.trim().isEmpty ? 'Sababsiz' : reasonInput.trim();
 
     try {
       debugPrint('Rad etish sababi yuborilmoqda: $reason');
       await callback(context, reason);
       if (!mounted) return;
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Shartnoma rad etildi.')),
       );
     } catch (e) {
       final message = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Rad etishda xato: $message')),
-      );
+      await showErrorDialog(context, "Rad etishda xato: $message");
     } finally {
       if (mounted) {
         setState(() => _isRejecting = false);

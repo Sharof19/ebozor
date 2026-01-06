@@ -3,8 +3,8 @@ import 'package:ebozor/src/data/services/my_key_service.dart';
 import 'package:ebozor/src/core/storage/app_preferences.dart';
 import 'package:ebozor/src/core/storage/secure_storage_service.dart';
 import 'package:ebozor/src/core/theme/app_colors.dart';
+import 'package:ebozor/src/core/widgets/error_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'organization_info_page.dart';
 
@@ -19,6 +19,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoggingOut = false;
   bool _isFetchingMyKey = false;
   bool _hasMyKey = false;
+  bool _isDemoMode = false;
 
   String? _name;
   String? _surname;
@@ -34,10 +35,31 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfileInfo() async {
+    final demoMode = await AppPreferences.isDemoMode();
+    if (!mounted) return;
+    if (demoMode) {
+      setState(() {
+        _isDemoMode = true;
+        _name = 'Demo';
+        _surname = 'Foydalanuvchi';
+        _role = 'Demo kirish';
+        _organization = 'Bekbaraka Demo';
+        _certificateInfo = const {
+          'organization': 'Bekbaraka Demo',
+          'stir': '000000000',
+          'locality': 'Toshkent',
+          'region': 'Toshkent',
+        };
+        _hasMyKey = false;
+        _myKeyStatus = 'Demo rejimi';
+      });
+      return;
+    }
     final info = await SecureStorageService.readCertificateInfo();
     final myKey = await SecureStorageService.readMyKey();
     if (!mounted) return;
     setState(() {
+      _isDemoMode = false;
       _name = info?['name'];
       _surname = info?['surname'];
       _role = info?['role'];
@@ -59,6 +81,16 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _logout() async {
     if (_isLoggingOut) return;
     setState(() => _isLoggingOut = true);
+    if (_isDemoMode) {
+      await AppPreferences.setDemoMode(false);
+      await SecureStorageService.clearAuthData();
+      await AppPreferences.clear();
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
+      return;
+    }
     var succeeded = false;
     String? refreshTokenSnapshot;
     try {
@@ -72,13 +104,10 @@ class _ProfilePageState extends State<ProfilePage> {
         'Logout failed. Refresh token: ${refreshTokenSnapshot ?? 'mavjud emas'}; error: $e',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Chiqish jarayonida xato: $e\nRefresh token: '
-              '${refreshTokenSnapshot ?? 'mavjud emas'}',
-            ),
-          ),
+        await showErrorDialog(
+          context,
+          'Chiqish jarayonida xato: $e\nRefresh token: '
+          '${refreshTokenSnapshot ?? 'mavjud emas'}',
         );
       }
     } finally {
@@ -110,13 +139,12 @@ class _ProfilePageState extends State<ProfilePage> {
     return trimmed;
   }
 
-  void _openOrganizationInfo() {
+  Future<void> _openOrganizationInfo() async {
     if (_certificateInfo == null || _certificateInfo!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ma\'lumotlar mavjud emas.')),
-      );
+      await showErrorDialog(context, "Ma'lumotlar mavjud emas.");
       return;
     }
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => OrganizationInfoPage(info: _certificateInfo!),
@@ -125,14 +153,20 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _obtainMyKey() async {
+    if (_isDemoMode) {
+      await showErrorDialog(
+        context,
+        "Demo rejimida kalit olish mavjud emas.",
+      );
+      return;
+    }
     if (_isFetchingMyKey) return;
     final hasInternet = await InternetConnection().hasInternetAccess;
     if (!hasInternet) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Internet mavjud emas. Ulanishni tekshirib qayta urinib ko\'ring.'),
-          ),
+        await showErrorDialog(
+          context,
+          "Internet mavjud emas. Ulanishni tekshirib qayta urinib ko'ring.",
         );
       }
       return;
@@ -166,139 +200,135 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  Future<void> _copyAccessToken() async {
-    final token = await SecureStorageService.readAccessToken();
-    if (!mounted) return;
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Token topilmadi. Iltimos, qayta kiring.')),
-      );
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: token));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Token nusxalandi.')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _ProfileHeader(
-                name: _headerName,
-                role: _role?.trim(),
-                organization: _organization?.trim(),
-              ),
-              const SizedBox(height: 16),
-              _OrganizationInfoCard(
-                info: _certificateInfo,
-                onTap: _openOrganizationInfo,
-              ),
-              if (_myKeyStatus != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _formatStatusText(_myKeyStatus!),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: _myKeyStatus!.startsWith('Kalit olishda xato')
-                        ? AppColors.error
-                        : Colors.black54,
+        bottom: false,
+        child: Builder(
+          builder: (context) {
+            const bottomPadding = 10.0;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ProfileHeader(
+                    name: _headerName,
+                    role: _role?.trim(),
+                    organization: _organization?.trim(),
                   ),
-                ),
-              ],
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: _isFetchingMyKey ? null : _obtainMyKey,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  _OrganizationInfoCard(
+                    info: _certificateInfo,
+                    onTap: _openOrganizationInfo,
                   ),
-                ),
-                child: _isFetchingMyKey
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Text('Kalit olinmoqda...'),
-                        ],
-                      )
-                    : Text(_hasMyKey ? 'Kalitni yangilash' : 'Kalit olish'),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _copyAccessToken,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                ),
-                icon: const Icon(Icons.copy, size: 18),
-                label: const Text(
-                  'Tokenni nusxalash',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: _isLoggingOut ? null : _logout,
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.redAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(
-                    color: Colors.black.withValues(alpha: 0.08),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isLoggingOut
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.redAccent,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Chiqilmoqda...',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      )
-                    : const Text(
-                        'Profildan chiqish',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                  const Spacer(),
+                  if (_myKeyStatus != null) ...[
+                    Text(
+                      _formatStatusText(_myKeyStatus!),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _myKeyStatus!.startsWith('Kalit olishda xato')
+                            ? AppColors.error
+                            : Colors.black54,
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  ElevatedButton(
+                    onPressed: _isFetchingMyKey ? null : _obtainMyKey,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isFetchingMyKey
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text('Kalit olinmoqda...'),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.vpn_key, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                _hasMyKey
+                                    ? 'Kalitni yangilash'
+                                    : 'Kalit olish',
+                              ),
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: _isLoggingOut ? null : _logout,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.redAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(
+                        color: Colors.black.withValues(alpha: 0.08),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isLoggingOut
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Chiqilmoqda...',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.logout, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'Profildan chiqish',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

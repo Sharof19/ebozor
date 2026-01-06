@@ -1,11 +1,12 @@
 import 'package:ebozor/src/core/storage/secure_storage_service.dart';
+import 'package:ebozor/src/core/storage/app_preferences.dart';
 import 'package:ebozor/src/core/theme/app_colors.dart';
+import 'package:ebozor/src/core/widgets/error_dialog.dart';
 import 'package:ebozor/src/data/services/client_agreements_service.dart';
 import 'package:ebozor/src/data/services/payment_plan_service.dart';
 import 'package:ebozor/src/data/services/sign_service.dart';
 import 'package:ebozor/src/features/documents/presentation/pages/ready_contract_page.dart';
 import 'package:ebozor/src/features/home/presentation/pages/payment_plan_page.dart';
-import 'package:ebozor/src/features/home/presentation/pages/profile_page.dart';
 import 'package:ebozor/src/features/navigation/presentation/pages/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,14 +26,37 @@ class _DocumentsPageState extends State<DocumentsPage> {
   bool _isPlanLoading = false;
   String? _error;
   List<ClientAgreement> _agreements = const [];
+  bool _isDemoMode = false;
 
   @override
   void initState() {
     super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final isDemo = await AppPreferences.isDemoMode();
+    if (!mounted) return;
+    if (isDemo) {
+      setState(() {
+        _isDemoMode = true;
+        _isLoading = false;
+        _agreements = _demoAgreements();
+      });
+      return;
+    }
     _loadAgreements();
   }
 
   Future<void> _loadAgreements() async {
+    if (_isDemoMode) {
+      setState(() {
+        _isLoading = false;
+        _error = null;
+        _agreements = _demoAgreements();
+      });
+      return;
+    }
     setState(() {
       _isLoading = true;
       _error = null;
@@ -61,6 +85,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
     ClientAgreement agreement, {
     bool showSignActions = false,
   }) async {
+    if (_isDemoMode) {
+      showSignActions = false;
+    }
     final html = agreement.readyContractHtml;
     final url = agreement.readyContractUrl;
     if (html != null && html.trim().isNotEmpty) {
@@ -88,17 +115,28 @@ class _DocumentsPageState extends State<DocumentsPage> {
       }
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Shartnoma havolasi mavjud emas.')),
+    await showErrorDialog(
+      context,
+      'Shartnoma havolasi mavjud emas.',
     );
   }
 
   Future<void> _openPaymentPlan(ClientAgreement agreement) async {
+    if (_isDemoMode) {
+      if (mounted) {
+        await showErrorDialog(
+          context,
+          "Demo rejimida to'lov rejasi mavjud emas.",
+        );
+      }
+      return;
+    }
     if (_isPlanLoading) return;
     if (agreement.id <= 0) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Shartnoma identifikatori noto\'g\'ri.')),
+      await showErrorDialog(
+        context,
+        "Shartnoma identifikatori noto'g'ri.",
       );
       return;
     }
@@ -123,7 +161,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isPlanLoading = false);
-      _showPlanError('Shartnoma to\'lov rejasi topilmadi.');
+      await _showPlanError("Shartnoma to'lov rejasi topilmadi.");
     } finally {
       if (mounted) {
         if (_isPlanLoading) {
@@ -133,56 +171,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
     }
   }
 
-  void _showPlanError(String message) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          contentPadding: const EdgeInsets.all(20),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircleAvatar(
-                radius: 28,
-                backgroundColor: Color(0xFFFFE5E5),
-                child: Icon(Icons.close, color: Colors.redAccent, size: 28),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Xatolik',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.redAccent,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(44),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Davom etish'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _showPlanError(String message) async {
+    await showErrorDialog(context, message);
   }
 
   @override
@@ -229,10 +219,26 @@ class _DocumentsPageState extends State<DocumentsPage> {
         context,
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.redAccent),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _error = null);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Davom etish'),
+              ),
+            ],
           ),
         ),
       );
@@ -254,14 +260,15 @@ class _DocumentsPageState extends State<DocumentsPage> {
       itemBuilder: (context, index) {
         final agreement = _agreements[index];
         final pendingIndex = _firstPendingIndex(agreement.signatories);
-        final canSign = pendingIndex >= 0 &&
+        final canSign = !_isDemoMode &&
+            pendingIndex >= 0 &&
             pendingIndex < agreement.signatories.length &&
             _isPending(agreement.signatories[pendingIndex]) &&
             agreement.signatories[pendingIndex].role.toLowerCase() == 'client';
         return _AgreementCard(
           agreement: agreement,
           onOpenContract: () => _openReadyContract(agreement),
-          onOpenPlan: () => _openPaymentPlan(agreement),
+          onOpenPlan: _isDemoMode ? null : () => _openPaymentPlan(agreement),
           onSign: canSign
               ? () => _openReadyContract(
                     agreement,
@@ -299,13 +306,20 @@ class _DocumentsPageState extends State<DocumentsPage> {
     BuildContext pageContext,
     ClientAgreement agreement,
   ) async {
-    final pageMessenger = ScaffoldMessenger.of(pageContext);
+    if (_isDemoMode) {
+      await showErrorDialog(
+        pageContext,
+        "Demo rejimida imzolash mavjud emas.",
+      );
+      return;
+    }
     final navigator = Navigator.of(pageContext);
     final rootMessenger = ScaffoldMessenger.of(context);
     final agreementId = agreement.id;
     if (agreementId <= 0) {
-      pageMessenger.showSnackBar(
-        const SnackBar(content: Text('Shartnoma identifikatori noto\'g\'ri.')),
+      await showErrorDialog(
+        pageContext,
+        "Shartnoma identifikatori noto'g'ri.",
       );
       return;
     }
@@ -321,9 +335,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       await _loadAgreements();
     } catch (e) {
       final message = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-      pageMessenger.showSnackBar(
-        SnackBar(content: Text('Imzolashda xato: $message')),
-      );
+      await showErrorDialog(pageContext, "Imzolashda xato: $message");
     }
   }
 
@@ -332,13 +344,20 @@ class _DocumentsPageState extends State<DocumentsPage> {
     ClientAgreement agreement,
     String reason,
   ) async {
-    final pageMessenger = ScaffoldMessenger.of(pageContext);
+    if (_isDemoMode) {
+      await showErrorDialog(
+        pageContext,
+        "Demo rejimida rad etish mavjud emas.",
+      );
+      return;
+    }
     final navigator = Navigator.of(pageContext);
     final rootMessenger = ScaffoldMessenger.of(context);
     final agreementId = agreement.id;
     if (agreementId <= 0) {
-      pageMessenger.showSnackBar(
-        const SnackBar(content: Text('Shartnoma identifikatori noto\'g\'ri.')),
+      await showErrorDialog(
+        pageContext,
+        "Shartnoma identifikatori noto'g'ri.",
       );
       return;
     }
@@ -357,9 +376,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       await _loadAgreements();
     } catch (e) {
       final message = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-      pageMessenger.showSnackBar(
-        SnackBar(content: Text('Rad etishda xato: $message')),
-      );
+      await showErrorDialog(pageContext, "Rad etishda xato: $message");
     }
   }
 
@@ -379,6 +396,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   Future<bool> _ensureHasMyKey(BuildContext ctx) async {
+    if (_isDemoMode) {
+      return false;
+    }
     final pkcs = await SecureStorageService.readMyKey();
     if (pkcs != null && pkcs.isNotEmpty) {
       return true;
@@ -387,10 +407,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
     if (Navigator.of(ctx).canPop()) {
       Navigator.of(ctx).pop();
     }
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      const SnackBar(
-        content: Text('Avval profil sahifasida kalit oling.'),
-      ),
+    await showErrorDialog(
+      context,
+      'Avval profil sahifasida kalit oling.',
     );
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -398,6 +417,72 @@ class _DocumentsPageState extends State<DocumentsPage> {
       ),
     );
     return false;
+  }
+
+  List<ClientAgreement> _demoAgreements() {
+    const demoHtml = '''
+      <html>
+        <body>
+          <h2>Demo shartnoma</h2>
+          <p>Bu demo rejimi uchun namuna shartnoma matni.</p>
+          <p>Real shartnoma ma'lumotlari faqat E-IMZO orqali kirganda ko'rinadi.</p>
+        </body>
+      </html>
+    ''';
+    return const [
+      ClientAgreement(
+        id: 1,
+        number: 'IJR-2025-000001',
+        client: 'BEKBARAKA DEMO',
+        contractTypeName: 'Ijara shartnomasi',
+        startDate: '2025-01-01',
+        endDate: '2025-12-31',
+        statusName: 'signed',
+        isActive: true,
+        signatories: [
+          AgreementSignatory(
+            name: 'Demo Foydalanuvchi',
+            role: 'client',
+            status: 'signed',
+            isSigned: true,
+          ),
+          AgreementSignatory(
+            name: 'Bek Baraka',
+            role: 'lessor',
+            status: 'signed',
+            isSigned: true,
+          ),
+        ],
+        readyContractHtml: demoHtml,
+        readyContractName: "Shartnomani ko'rish",
+      ),
+      ClientAgreement(
+        id: 2,
+        number: 'IJR-2025-000002',
+        client: 'DEMO COMPANY',
+        contractTypeName: 'Ijara shartnomasi',
+        startDate: '2025-02-01',
+        endDate: '2026-01-31',
+        statusName: 'pending',
+        isActive: true,
+        signatories: [
+          AgreementSignatory(
+            name: 'Demo Client',
+            role: 'client',
+            status: 'pending',
+            isSigned: false,
+          ),
+          AgreementSignatory(
+            name: 'Bek Baraka',
+            role: 'lessor',
+            status: 'in_progress',
+            isSigned: false,
+          ),
+        ],
+        readyContractHtml: demoHtml,
+        readyContractName: "Shartnomani ko'rish",
+      ),
+    ];
   }
 }
 

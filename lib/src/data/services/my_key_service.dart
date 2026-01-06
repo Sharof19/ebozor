@@ -484,6 +484,10 @@ class MyKeyService {
     if (storedStir != null && storedStir.isNotEmpty) {
       return storedStir;
     }
+    final storedPinfl = storedInfo?['pinfl']?.trim();
+    if (storedPinfl != null && storedPinfl.isNotEmpty) {
+      return storedPinfl;
+    }
 
     throw Exception(
       'STIR topilmadi. Iltimos, E-IMZO orqali identifikatsiyadan o\'ting yoki STIR kiriting.',

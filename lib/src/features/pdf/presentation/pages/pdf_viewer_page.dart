@@ -124,9 +124,27 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
               ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 16),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.redAccent),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _errorMessage = null;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Davom etish'),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 16),
