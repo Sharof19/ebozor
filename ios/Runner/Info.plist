@@ -2,14 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required for meetings</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Microphone access is required for meetings</string>
-	<key>NSAllowsArbitraryLoads</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Why is my app authenticating using face id?</string>
 	<key>CFBundleDevelopmentRegion</key>
@@ -56,13 +48,18 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>eimzo</string>
+	</array>
+
 	<!-- ADD THIS PART FOR URL SCHEME -->
 	<key>CFBundleURLTypes</key>
 	<array>
 	    <dict>
 	        <key>CFBundleURLSchemes</key>
 	        <array>
-	            <string>eimzoidcard</string>
+	            <string>eimzo</string>
 	        </array>
 	    </dict>
 	</array>
