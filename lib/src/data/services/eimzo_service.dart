@@ -63,7 +63,11 @@ class EimzoService {
     try {
       await _startSigningFlow();
       await _deepLink();
-      await _waitForStatus(1, allowIntermediates: const {2});
+      await _waitForStatus(
+        1,
+        allowIntermediates: const {2},
+        timeout: const Duration(seconds: 30),
+      );
       final pkcs = await _verify();
       if (pkcs != null && pkcs.isNotEmpty) {
         await SecureStorageService.savePkcs(pkcs);
@@ -430,8 +434,8 @@ class EimzoService {
   Future<void> _waitForStatus(
     int expectedStatus, {
     Set<int> allowIntermediates = const {},
+    Duration timeout = const Duration(minutes: 2),
   }) async {
-    const timeout = Duration(minutes: 2);
     final endTime = DateTime.now().add(timeout);
 
     while (DateTime.now().isBefore(endTime)) {

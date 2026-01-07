@@ -49,6 +49,14 @@ class _SigningPageState extends State<SigningPage> {
         _status = _SigningStatus.success;
         _goToMain();
       }
+    } on TimeoutException {
+      if (!mounted) return;
+      _status = _SigningStatus.failure;
+      await _showErrorDialog(
+        "Javob kelmadi. Qayta urinib ko'ring.",
+      );
+      _goToAuth();
+      return;
     } catch (e) {
       if (!mounted) return;
       _status = _SigningStatus.failure;
