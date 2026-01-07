@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ebozor/src/core/theme/app_colors.dart';
 import 'package:ebozor/src/core/widgets/error_dialog.dart';
 import 'package:ebozor/src/data/services/eimzo_service.dart';
