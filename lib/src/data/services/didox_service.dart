@@ -36,22 +36,28 @@ class DidoxService {
   Future<String?> startFlow({String? stir}) async {
     final resolvedStir = await _resolveStir(stir);
 
-    final isInstalled =
-        await InstalledApps.isAppInstalled('uz.yt.idcard.eimzo') ?? false;
-    if (!isInstalled) {
-      await launchUrl(
-        Uri.parse(
-            'https://play.google.com/store/apps/details?id=uz.yt.idcard.eimzo'),
-        mode: LaunchMode.externalApplication,
-      );
-      return null;
+    if (Platform.isAndroid) {
+      final isInstalled =
+          await InstalledApps.isAppInstalled('uz.yt.idcard.eimzo') ?? false;
+      if (!isInstalled) {
+        await launchUrl(
+          Uri.parse(
+              'https://play.google.com/store/apps/details?id=uz.yt.idcard.eimzo'),
+          mode: LaunchMode.externalApplication,
+        );
+        return null;
+      }
     }
 
     await AppPreferences.setSignedIn(false);
     try {
       await _startSigningFlow(resolvedStir);
       await _deepLink();
-      await _waitForStatus(1, allowIntermediates: const {2});
+      await _waitForStatus(
+        1,
+        allowIntermediates: const {2},
+        timeout: const Duration(seconds: 30),
+      );
       final pkcs = await _verify();
       if (pkcs != null && pkcs.isNotEmpty) {
         await SecureStorageService.savePkcs(pkcs);
@@ -153,8 +159,8 @@ class DidoxService {
   Future<void> _waitForStatus(
     int expectedStatus, {
     Set<int> allowIntermediates = const {},
+    Duration timeout = const Duration(minutes: 2),
   }) async {
-    const timeout = Duration(minutes: 2);
     final endTime = DateTime.now().add(timeout);
 
     while (DateTime.now().isBefore(endTime)) {

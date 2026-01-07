@@ -32,15 +32,17 @@ class MyKeyService {
   Future<String?> createMyKey({String? stir}) async {
     final resolvedStir = await _resolveStir(stir);
 
-    final isInstalled =
-        await InstalledApps.isAppInstalled('uz.yt.idcard.eimzo') ?? false;
-    if (!isInstalled) {
-      await launchUrl(
-        Uri.parse(
-            'https://play.google.com/store/apps/details?id=uz.yt.idcard.eimzo'),
-        mode: LaunchMode.externalApplication,
-      );
-      return null;
+    if (Platform.isAndroid) {
+      final isInstalled =
+          await InstalledApps.isAppInstalled('uz.yt.idcard.eimzo') ?? false;
+      if (!isInstalled) {
+        await launchUrl(
+          Uri.parse(
+              'https://play.google.com/store/apps/details?id=uz.yt.idcard.eimzo'),
+          mode: LaunchMode.externalApplication,
+        );
+        return null;
+      }
     }
 
     try {
